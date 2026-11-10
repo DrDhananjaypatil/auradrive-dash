@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#07060c">
 <title>AuraDrive Dash</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%2307060c%27/%3E%3Ccircle cx=%2732%27 cy=%2732%27 r=%2722%27 fill=%27none%27 stroke=%27%23f5b301%27 stroke-width=%275%27/%3E%3Cpath d=%27M27 22v20l16-10z%27 fill=%27%23b44cff%27/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Manrope:wght@400;600;700&family=Saira+Condensed:wght@500;700&family=Barlow:wght@400;600;700&family=Exo+2:wght@500;700&family=Inter:wght@400;600;700&family=VT323&family=Share+Tech+Mono&display=swap">
@@ -963,23 +965,30 @@ button, input, select { font: inherit; color: inherit; }
 
   // ================= Music =================
   const audio = $("audio");
-  const STATIONS = [
-    { id: "r-groovesalad", name: "Groove Salad", sub: "Chill ambient grooves", url: "https://ice1.somafm.com/groovesalad-128-mp3" },
-    { id: "r-indiepop", name: "Indie Pop Rocks!", sub: "Indie pop and rock", url: "https://ice1.somafm.com/indiepop-128-mp3" },
-    { id: "r-beatblender", name: "Beat Blender", sub: "Deep house and downtempo", url: "https://ice1.somafm.com/beatblender-128-mp3" },
-    { id: "r-lush", name: "Lush", sub: "Sensual vocals, mellow electronica", url: "https://ice1.somafm.com/lush-128-mp3" },
-    { id: "r-seventies", name: "Left Coast 70s", sub: "Mellow 70s rock", url: "https://ice1.somafm.com/seventies-128-mp3" },
-    { id: "r-secretagent", name: "Secret Agent", sub: "Spy-movie lounge", url: "https://ice1.somafm.com/secretagent-128-mp3" },
+  // SomaFM runs several stream servers; if one refuses (403) or is down, the player tries the next.
+  const SOMA_SERVERS = ["ice2", "ice4", "ice6", "ice1"];
+  const somaUrls = (ch) => [
+    ...SOMA_SERVERS.map((h) => `https://${h}.somafm.com/${ch}-128-mp3`),
+    ...SOMA_SERVERS.map((h) => `https://${h}.somafm.com/${ch}-128-aac`),
+    ...SOMA_SERVERS.map((h) => `https://${h}.somafm.com/${ch}-64-aac`),
   ];
+  const STATIONS = [
+    { id: "r-groovesalad", name: "Groove Salad", sub: "Chill ambient grooves", soma: "groovesalad" },
+    { id: "r-indiepop", name: "Indie Pop Rocks!", sub: "Indie pop and rock", soma: "indiepop" },
+    { id: "r-beatblender", name: "Beat Blender", sub: "Deep house and downtempo", soma: "beatblender" },
+    { id: "r-lush", name: "Lush", sub: "Sensual vocals, mellow electronica", soma: "lush" },
+    { id: "r-seventies", name: "Left Coast 70s", sub: "Mellow 70s rock", soma: "seventies" },
+    { id: "r-secretagent", name: "Secret Agent", sub: "Spy-movie lounge", soma: "secretagent" },
+  ].map((x) => ({ ...x, urls: somaUrls(x.soma), url: somaUrls(x.soma)[0] }));
   const m = {
     songs: [],                                   // {id, name, blob, url}
     custom: store.get("stations", []),           // {id, name, url}
-    queue: [], index: -1, kind: "radio",
+    queue: [], index: -1, kind: "radio", attempt: 0,
     shuffle: store.get("shuffle", false),
     vol: store.get("vol", 0.85),
     seeking: false,
   };
-  const allStations = () => STATIONS.map((x) => ({ ...x, src: "SomaFM" })).concat(m.custom.map((x) => ({ ...x, sub: "Your station", src: "Custom" })));
+  const allStations = () => STATIONS.map((x) => ({ ...x, src: "SomaFM" })).concat(m.custom.map((x) => ({ ...x, urls: [x.url], sub: "Your station", src: "Custom" })));
 
   // IndexedDB keeps added songs between visits.
   const idb = (() => {
@@ -1129,15 +1138,22 @@ button, input, select { font: inherit; color: inherit; }
     startCurrent();
   }
 
+  function playSrc(url) {
+    audio.src = url;
+    audio.volume = m.vol;
+    audio.play().catch((err) => {
+      // Autoplay rules: the browser wants a tap first.
+      if (err && err.name === "NotAllowedError") $("mSub").textContent = "Tap play to start.";
+      // Other failures arrive as an "error" event, which tries the next server.
+    });
+  }
+
   function startCurrent() {
     const item = current();
     if (!item) return;
-    audio.src = item.url;
-    audio.volume = m.vol;
+    m.attempt = 0;
     renderNow();
-    audio.play().catch((err) => {
-      $("mSub").textContent = m.kind === "radio" ? "This station can't play here. Try another." : "This song can't play here.";
-    });
+    playSrc(item.urls ? item.urls[0] : item.url);
     renderSongs(); renderRadio();
   }
 
@@ -1214,8 +1230,19 @@ button, input, select { font: inherit; color: inherit; }
   audio.addEventListener("ended", () => { if (m.kind === "song") step(1); else renderPlayState(); });
   audio.addEventListener("error", () => {
     if (!audio.src) return;
+    const item = current();
+    if (m.kind === "radio" && item && item.urls && m.attempt < item.urls.length - 1) {
+      m.attempt++;
+      $("mSub").textContent = `Radio · trying another server (${m.attempt + 1} of ${item.urls.length})…`;
+      playSrc(item.urls[m.attempt]);
+      return;
+    }
     $("mSub").textContent = m.kind === "radio" ? "This station isn't reachable right now. Try another." : "This song file can't be played.";
     renderPlayState();
+  });
+  audio.addEventListener("playing", () => {
+    const item = current();
+    if (m.kind === "radio" && item) $("mSub").textContent = `Radio · ${item.sub || "Internet radio"}`;
   });
 
   $("mPlay").addEventListener("click", togglePlay);

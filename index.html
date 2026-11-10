@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07060c">
+<title>AuraDrive Dash</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: landscape car-screen grid — big speed dial left, clock/weather middle, trip/compass right, app dock along the bottom; stacks to one column on phones. */
+:root {
+  color-scheme: dark;
+  --bg: #07060c;
+  --panel: #12101b;
+  --panel-2: #1a1726;
+  --line: #2a2540;
+  --fg: #f1eefb;
+  --muted: #9b95b3;
+  --violet: #b44cff;
+  --gold: #f5b301;
+  --gold-soft: #ffd465;
+  --ok: #3ddc97;
+  --warn: #ffb020;
+  --bad: #ff5470;
+  --font-display: "Chakra Petch", "Rajdhani", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Manrope", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 22px;
+}
+html, body { height: 100%; }
+body {
+  background:
+    radial-gradient(60vmax 60vmax at 8% -10%, rgba(180, 76, 255, 0.20), transparent 60%),
+    radial-gradient(50vmax 50vmax at 100% 110%, rgba(245, 179, 1, 0.10), transparent 60%),
+    var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-areas:
+    "top top top"
+    "speed clock trip"
+    "speed weather compass"
+    "dock dock dock";
+}
+
+/* Top bar */
+.top { grid-area: top; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: 0.06em; }
+.brand .a { color: var(--fg); }
+.brand .d { color: var(--gold); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line);
+  font-size: 13px; color: var(--muted); white-space: nowrap;
+}
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.chip.live .dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+.chip.demo { color: var(--gold-soft); border-color: rgba(245, 179, 1, 0.45); }
+.chip.demo .dot { background: var(--gold); }
+.iconbtn {
+  height: 40px; min-width: 40px; padding: 0 14px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg);
+}
+.iconbtn:hover { border-color: var(--violet); }
+
+/* Panels */
+.panel {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+.label {
+  font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.tag {
+  font-size: 11px; letter-spacing: 0.1em; padding: 3px 8px; border-radius: 999px;
+  background: rgba(245, 179, 1, 0.14); color: var(--gold-soft); border: 1px solid rgba(245, 179, 1, 0.35);
+}
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+
+/* Speed */
+.speed { grid-area: speed; align-items: stretch; }
+.dial { position: relative; flex: 1; min-height: 240px; display: grid; place-items: center; }
+.dial canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.readout { position: relative; text-align: center; display: grid; gap: 2px; }
+.readout .value { font-size: clamp(64px, 11vmin, 132px); font-weight: 700; line-height: 0.95; letter-spacing: -0.02em; }
+.readout .unit { font-size: 15px; color: var(--muted); letter-spacing: 0.2em; }
+.readout .state { margin-top: 6px; font-size: 13px; font-weight: 600; }
+.state.ok { color: var(--ok); }
+.state.over { color: var(--bad); }
+.limit { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; }
+.limit .badge {
+  width: 58px; height: 58px; border-radius: 50%;
+  border: 5px solid var(--bad); background: #fff; color: #111;
+  display: grid; place-items: center; font-weight: 700; font-size: 20px;
+}
+.limit button {
+  width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); font-size: 22px; line-height: 1;
+}
+.limit .cap { font-size: 12px; color: var(--muted); width: 72px; }
+
+/* Clock */
+.clock { grid-area: clock; justify-content: center; }
+.clock .time { font-size: clamp(48px, 9vmin, 92px); font-weight: 700; line-height: 1; margin-top: 6px; }
+.clock .time small { font-size: 0.34em; color: var(--muted); margin-left: 6px; letter-spacing: 0.08em; }
+.clock .date { color: var(--muted); font-size: 16px; margin-top: 6px; }
+
+/* Weather */
+.weather { grid-area: weather; justify-content: space-between; }
+.wx { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+.wx svg { width: 56px; height: 56px; flex: none; }
+.wx .temp { font-size: clamp(38px, 6.5vmin, 60px); font-weight: 700; line-height: 1; }
+.wx .desc { font-size: 15px; font-weight: 600; }
+.wx .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+/* Trip */
+.trip { grid-area: trip; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 10px; flex: 1; align-content: center; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font-size: clamp(22px, 3.6vmin, 32px); font-weight: 600; }
+.stat .v small { font-size: 0.5em; color: var(--muted); margin-left: 3px; }
+.reset { position: absolute; right: 14px; bottom: 12px; height: 34px; padding: 0 12px; font-size: 12px; }
+
+/* Compass */
+.compass { grid-area: compass; }
+.compass-row { display: flex; align-items: center; gap: 16px; flex: 1; min-height: 0; }
+.rose { width: min(120px, 32vmin); aspect-ratio: 1; max-width: 100%; flex: none; }
+.rose .ring { transition: transform 0.6s ease-out; transform-origin: 60px 60px; }
+.heading .dir { font-size: clamp(30px, 5vmin, 46px); font-weight: 700; color: var(--gold); line-height: 1; }
+.heading .deg { color: var(--muted); font-size: 15px; margin-top: 4px; }
+.heading .hint { color: var(--muted); font-size: 12px; margin-top: 8px; max-width: 18ch; }
+
+/* Dock */
+.dock {
+  grid-area: dock;
+  display: flex; gap: 10px; overflow-x: auto; padding: 10px;
+  border-radius: var(--radius); background: rgba(18, 16, 27, 0.85);
+  border: 1px solid transparent;
+  background-image: linear-gradient(rgba(18,16,27,0.92), rgba(18,16,27,0.92)), linear-gradient(90deg, rgba(180,76,255,0.7), rgba(245,179,1,0.8));
+  background-origin: border-box; background-clip: padding-box, border-box;
+}
+.app-link {
+  flex: 1 0 118px; min-height: 76px; border-radius: 16px; text-decoration: none; color: var(--fg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  font-weight: 600; font-size: 14px; background: transparent;
+}
+.app-link:hover, .app-link:focus-visible { background: var(--panel-2); }
+.app-link svg { width: 30px; height: 30px; stroke: var(--gold-soft); fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+/* Phones and narrow screens: one column */
+@media (max-width: 899px) {
+  html, body { height: auto; }
+  .app {
+    height: auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas:
+      "top top"
+      "speed speed"
+      "clock clock"
+      "trip trip"
+      "weather compass"
+      "dock dock";
+  }
+  .dial { min-height: 280px; }
+}
+@media (max-width: 520px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "speed" "clock" "trip" "weather" "compass" "dock"; }
+  .chips { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rose .ring { transition: none; }
+}
+</style>
+</head>
+<body>
+
+
+<main class="app" id="app">
+  <header class="top">
+    <div class="brand"><span class="a">AURA</span><span class="d">DRIVE</span></div>
+    <div class="chips">
+      <span class="chip demo" id="gpsChip"><span class="dot"></span><span id="gpsText">Demo · no GPS</span></span>
+      <span class="chip" id="batteryChip" hidden><span id="batteryText"></span></span>
+      <button class="iconbtn" id="fullBtn" type="button" aria-label="Full screen">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        Full screen
+      </button>
+    </div>
+  </header>
+
+  <section class="panel speed" aria-label="Speed">
+    <div class="label"><span>Speed</span><span class="tag" id="speedTag">DEMO</span></div>
+    <div class="dial">
+      <canvas id="dial" aria-hidden="true"></canvas>
+      <div class="readout">
+        <div class="value num" id="speedValue">0</div>
+        <div class="unit">KM/H</div>
+        <div class="state ok" id="speedState">Within limit</div>
+      </div>
+    </div>
+    <div class="limit">
+      <button type="button" id="limitDown" aria-label="Lower speed limit">−</button>
+      <div class="badge num" id="limitValue" aria-live="polite">80</div>
+      <button type="button" id="limitUp" aria-label="Raise speed limit">+</button>
+      <div class="cap">Your speed limit</div>
+    </div>
+  </section>
+
+  <section class="panel clock" aria-label="Time">
+    <div class="label"><span>Time</span><span id="tz"></span></div>
+    <div class="time num" id="time">--:--</div>
+    <div class="date" id="date"></div>
+  </section>
+
+  <section class="panel weather" aria-label="Weather">
+    <div class="label"><span>Weather</span><span class="tag" id="wxTag">DEMO</span></div>
+    <div class="wx">
+      <svg id="wxIcon" viewBox="0 0 48 48" aria-hidden="true"></svg>
+      <div>
+        <div class="temp num" id="wxTemp">29°</div>
+        <div class="desc" id="wxDesc">Mostly clear</div>
+        <div class="sub" id="wxSub">Feels 31° · Wind 9 km/h</div>
+      </div>
+    </div>
+    <div class="note" id="wxNote">Sample weather. Live weather appears once GPS is on.</div>
+  </section>
+
+  <section class="panel trip" aria-label="Trip">
+    <div class="label"><span>This trip</span><span class="tag" id="tripTag">DEMO</span></div>
+    <div class="stats">
+      <div class="stat"><div class="k">Distance</div><div class="v num" id="tDist">0.0<small>km</small></div></div>
+      <div class="stat"><div class="k">Driving time</div><div class="v num" id="tTime">0:00</div></div>
+      <div class="stat"><div class="k">Average</div><div class="v num" id="tAvg">0<small>km/h</small></div></div>
+      <div class="stat"><div class="k">Top speed</div><div class="v num" id="tMax">0<small>km/h</small></div></div>
+    </div>
+    <button class="iconbtn reset" type="button" id="tripReset">Reset trip</button>
+  </section>
+
+  <section class="panel compass" aria-label="Heading">
+    <div class="label"><span>Heading</span></div>
+    <div class="compass-row">
+      <svg class="rose" viewBox="0 0 120 120" aria-hidden="true">
+        <circle cx="60" cy="60" r="56" fill="none" stroke="#2a2540" stroke-width="2"/>
+        <g class="ring" id="ring">
+          <g id="ticks"></g>
+          <text x="60" y="20" text-anchor="middle" fill="#ff5470" font-size="13" font-weight="700" font-family="Chakra Petch, sans-serif">N</text>
+          <text x="103" y="65" text-anchor="middle" fill="#9b95b3" font-size="12" font-family="Chakra Petch, sans-serif">E</text>
+          <text x="60" y="108" text-anchor="middle" fill="#9b95b3" font-size="12" font-family="Chakra Petch, sans-serif">S</text>
+          <text x="17" y="65" text-anchor="middle" fill="#9b95b3" font-size="12" font-family="Chakra Petch, sans-serif">W</text>
+        </g>
+        <path d="M60 34 L70 72 L60 65 L50 72 Z" fill="#f5b301"/>
+      </svg>
+      <div class="heading">
+        <div class="dir num" id="hDir">N</div>
+        <div class="deg num" id="hDeg">0°</div>
+        <div class="hint" id="hHint">Direction your car is heading.</div>
+      </div>
+    </div>
+  </section>
+
+  <nav class="dock" aria-label="Apps">
+    <a class="app-link" href="https://m.youtube.com" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M10.5 9.5 15 12l-4.5 2.5z"/></svg>YouTube
+    </a>
+    <a class="app-link" href="https://www.google.com/maps" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24"><path d="M12 21s-6-5.4-6-10a6 6 0 1 1 12 0c0 4.6-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg>Maps
+    </a>
+    <a class="app-link" href="https://music.youtube.com" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>Music
+    </a>
+    <a class="app-link" href="https://news.google.com" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>News
+    </a>
+    <a class="app-link" href="https://www.google.com/search?q=petrol+pump+near+me" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24"><path d="M5 20V5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15M4 20h11M7 8h5"/><path d="M14 10h2a2 2 0 0 1 2 2v4a1.5 1.5 0 0 0 3 0V9l-3-3"/></svg>Fuel nearby
+    </a>
+    <a class="app-link" href="https://www.google.com/search?q=ev+charging+near+me" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24"><rect x="5" y="4" width="10" height="16" rx="2"/><path d="m11 8-3 4h4l-3 4"/><path d="M15 10h2a2 2 0 0 1 2 2v3"/></svg>EV charge
+    </a>
+  </nav>
+</main>
+
+<script>
+(() => {
+  // ---------- Small helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("auradash." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("auradash." + k, JSON.stringify(v)); } catch {} },
+  };
+  const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const MAX_SPEED = 180;
+
+  // ---------- State ----------
+  const s = {
+    live: false,            // true once real GPS fixes arrive
+    target: 0,              // km/h from GPS (or demo)
+    shown: 0,               // eased value drawn on the dial
+    heading: 0,
+    limit: store.get("limit", 80),
+    trip: store.get("trip", { dist: 0, moving: 0, max: 0 }),
+    last: null,             // last GPS fix for distance
+    demoTrip: { dist: 12.4, moving: 1460, max: 78 },
+    coords: null,
+    wxFetchedAt: 0,
+  };
+
+  // ---------- Clock ----------
+  function tick() {
+    const now = new Date();
+    const t = now.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
+    const m = t.match(/^(.*?)\s?([ap]\.?m\.?)$/i);
+    $("time").innerHTML = m ? `${m[1]}<small>${m[2].replace(/\./g, "").toUpperCase()}</small>` : t;
+    $("date").textContent = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+    try { $("tz").textContent = Intl.DateTimeFormat().resolvedOptions().timeZone.replace("_", " "); } catch {}
+  }
+  tick(); setInterval(tick, 1000);
+
+  // ---------- Speed limit ----------
+  function renderLimit() { $("limitValue").textContent = s.limit; }
+  $("limitDown").addEventListener("click", () => { s.limit = Math.max(20, s.limit - 10); store.set("limit", s.limit); renderLimit(); });
+  $("limitUp").addEventListener("click", () => { s.limit = Math.min(160, s.limit + 10); store.set("limit", s.limit); renderLimit(); });
+  renderLimit();
+
+  // ---------- Dial ----------
+  const canvas = $("dial");
+  const ctx = canvas.getContext("2d");
+  const START = Math.PI * 0.75, SWEEP = Math.PI * 1.5;
+  function drawDial() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const cx = w / 2, cy = h / 2 + h * 0.04;
+    const r = Math.min(w, h) * 0.44;
+    const lw = Math.max(10, r * 0.085);
+    const frac = Math.min(s.shown, MAX_SPEED) / MAX_SPEED;
+    const over = s.shown > s.limit;
+
+    // track
+    ctx.lineCap = "round";
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = "#221e33";
+    ctx.beginPath(); ctx.arc(cx, cy, r, START, START + SWEEP); ctx.stroke();
+
+    // active arc
+    let grad;
+    if (over) {
+      grad = "#ff5470";
+    } else if (ctx.createConicGradient) {
+      grad = ctx.createConicGradient(START, cx, cy);
+      grad.addColorStop(0, "#b44cff");
+      grad.addColorStop(0.75, "#f5b301");
+      grad.addColorStop(1, "#f5b301");
+    } else {
+      grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
+      grad.addColorStop(0, "#b44cff"); grad.addColorStop(1, "#f5b301");
+    }
+    if (frac > 0.002) {
+      ctx.strokeStyle = grad;
+      ctx.shadowColor = over ? "rgba(255,84,112,0.6)" : "rgba(180,76,255,0.55)";
+      ctx.shadowBlur = 18;
+      ctx.beginPath(); ctx.arc(cx, cy, r, START, START + SWEEP * frac); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // ticks and labels
+    ctx.lineCap = "butt";
+    for (let v = 0; v <= MAX_SPEED; v += 10) {
+      const a = START + SWEEP * (v / MAX_SPEED);
+      const major = v % 30 === 0;
+      const r1 = r - lw * 0.9, r2 = r1 - (major ? lw * 0.9 : lw * 0.45);
+      ctx.strokeStyle = major ? "#9b95b3" : "#3b3552";
+      ctx.lineWidth = major ? 2 : 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+      ctx.stroke();
+      if (major) {
+        const rl = r2 - lw * 1.1;
+        ctx.fillStyle = "#9b95b3";
+        ctx.font = `600 ${Math.max(11, r * 0.075)}px "Chakra Petch", sans-serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(String(v), cx + Math.cos(a) * rl, cy + Math.sin(a) * rl);
+      }
+    }
+
+    // speed-limit marker
+    const la = START + SWEEP * (Math.min(s.limit, MAX_SPEED) / MAX_SPEED);
+    ctx.strokeStyle = "#ff5470"; ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(la) * (r + lw * 0.7), cy + Math.sin(la) * (r + lw * 0.7));
+    ctx.lineTo(cx + Math.cos(la) * (r - lw * 0.7), cy + Math.sin(la) * (r - lw * 0.7));
+    ctx.stroke();
+  }
+
+  function renderSpeed() {
+    const v = Math.round(s.shown);
+    $("speedValue").textContent = v;
+    const over = v > s.limit;
+    const st = $("speedState");
+    st.textContent = over ? `Over limit by ${v - s.limit} km/h` : (v < 3 ? "Parked" : "Within limit");
+    st.className = "state " + (over ? "over" : "ok");
+  }
+
+  // ---------- Heading ----------
+  const ticksG = $("ticks");
+  for (let d = 0; d < 360; d += 15) {
+    const a = (d - 90) * Math.PI / 180, major = d % 45 === 0;
+    const r1 = 50, r2 = major ? 43 : 46;
+    const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    l.setAttribute("x1", 60 + Math.cos(a) * r1); l.setAttribute("y1", 60 + Math.sin(a) * r1);
+    l.setAttribute("x2", 60 + Math.cos(a) * r2); l.setAttribute("y2", 60 + Math.sin(a) * r2);
+    l.setAttribute("stroke", major ? "#9b95b3" : "#3b3552"); l.setAttribute("stroke-width", major ? 2 : 1);
+    ticksG.appendChild(l);
+  }
+  const NAMES = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  let ringAngle = 0;
+  function renderHeading() {
+    const h = ((s.heading % 360) + 360) % 360;
+    $("hDir").textContent = NAMES[Math.round(h / 45) % 8];
+    $("hDeg").textContent = Math.round(h) + "°";
+    // rotate the shortest way round
+    let target = -h, diff = target - ringAngle;
+    diff = ((diff + 540) % 360) - 180;
+    ringAngle += diff;
+    $("ring").style.transform = `rotate(${ringAngle}deg)`;
+  }
+
+  // ---------- Trip ----------
+  function fmtTime(sec) {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    return h > 0 ? `${h}:${String(m).padStart(2, "0")}` : `0:${String(m).padStart(2, "0")}`;
+  }
+  function renderTrip() {
+    const t = s.live ? s.trip : s.demoTrip;
+    $("tDist").innerHTML = `${t.dist.toFixed(1)}<small>km</small>`;
+    $("tTime").textContent = fmtTime(t.moving);
+    const avg = t.moving > 30 ? t.dist / (t.moving / 3600) : 0;
+    $("tAvg").innerHTML = `${Math.round(avg)}<small>km/h</small>`;
+    $("tMax").innerHTML = `${Math.round(t.max)}<small>km/h</small>`;
+  }
+  $("tripReset").addEventListener("click", () => {
+    if (s.live) { s.trip = { dist: 0, moving: 0, max: 0 }; store.set("trip", s.trip); }
+    else { s.demoTrip = { dist: 0, moving: 0, max: 0 }; }
+    renderTrip();
+  });
+
+  function haversineKm(a, b) {
+    const R = 6371, toR = Math.PI / 180;
+    const dLat = (b.lat - a.lat) * toR, dLon = (b.lon - a.lon) * toR;
+    const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toR) * Math.cos(b.lat * toR) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+
+  // ---------- GPS ----------
+  function setMode(live, text) {
+    s.live = live;
+    const chip = $("gpsChip");
+    chip.className = "chip " + (live ? "live" : "demo");
+    $("gpsText").textContent = text;
+    ["speedTag", "tripTag"].forEach((id) => { $(id).hidden = live; });
+    renderTrip();
+  }
+
+  function onFix(pos) {
+    const c = pos.coords;
+    const now = pos.timestamp || Date.now();
+    const fix = { lat: c.latitude, lon: c.longitude, t: now, acc: c.accuracy };
+    let kmh = (typeof c.speed === "number" && !isNaN(c.speed)) ? c.speed * 3.6 : null;
+
+    if (s.last && now > s.last.t) {
+      const dKm = haversineKm(s.last, fix);
+      const dt = (now - s.last.t) / 1000;
+      if (kmh === null) kmh = dt > 0 ? (dKm / dt) * 3600 : 0;
+      // Count distance only for good fixes while moving, to ignore GPS drift at traffic lights.
+      if ((c.accuracy || 99) < 40 && kmh > 3 && dt < 30) {
+        s.trip.dist += dKm;
+        s.trip.moving += dt;
+      }
+    }
+    kmh = Math.max(0, kmh || 0);
+    s.trip.max = Math.max(s.trip.max, kmh);
+    s.target = kmh;
+    if (typeof c.heading === "number" && !isNaN(c.heading) && kmh > 3) { s.heading = c.heading; renderHeading(); }
+    s.last = fix;
+    s.coords = fix;
+    store.set("trip", s.trip);
+
+    if (!s.live) setMode(true, "Live GPS");
+    renderTrip();
+    $("hHint").textContent = kmh > 3 ? "Direction your car is heading." : "Start moving to update the heading.";
+    maybeWeather();
+  }
+
+  function onGpsError(err) {
+    if (s.live) { $("gpsText").textContent = "GPS signal lost"; return; }
+    const msg = err && err.code === 1 ? "Demo · location blocked" : "Demo · waiting for GPS";
+    setMode(false, msg);
+  }
+
+  if ("geolocation" in navigator) {
+    try {
+      navigator.geolocation.watchPosition(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+    } catch (e) { onGpsError(e); }
+  } else {
+    setMode(false, "Demo · no GPS on this device");
+  }
+
+  // ---------- Weather (Open-Meteo, no key needed) ----------
+  const WX = {
+    0: ["Clear sky", "sun"], 1: ["Mostly clear", "sun"], 2: ["Partly cloudy", "cloudsun"], 3: ["Overcast", "cloud"],
+    45: ["Fog", "fog"], 48: ["Fog", "fog"], 51: ["Light drizzle", "rain"], 53: ["Drizzle", "rain"], 55: ["Heavy drizzle", "rain"],
+    61: ["Light rain", "rain"], 63: ["Rain", "rain"], 65: ["Heavy rain", "rain"], 66: ["Freezing rain", "rain"], 67: ["Freezing rain", "rain"],
+    71: ["Light snow", "snow"], 73: ["Snow", "snow"], 75: ["Heavy snow", "snow"], 80: ["Rain showers", "rain"], 81: ["Rain showers", "rain"],
+    82: ["Heavy showers", "rain"], 95: ["Thunderstorm", "storm"], 96: ["Thunderstorm", "storm"], 99: ["Thunderstorm", "storm"],
+  };
+  const ICONS = {
+    sun: '<circle cx="24" cy="24" r="8" fill="#f5b301"/><g stroke="#f5b301" stroke-width="2.5" stroke-linecap="round"><path d="M24 6v5M24 37v5M6 24h5M37 24h5M11.3 11.3l3.5 3.5M33.2 33.2l3.5 3.5M11.3 36.7l3.5-3.5M33.2 14.8l3.5-3.5"/></g>',
+    cloudsun: '<circle cx="18" cy="18" r="7" fill="#f5b301"/><path d="M16 36h18a7 7 0 0 0 0-14 9 9 0 0 0-17 3 5.5 5.5 0 0 0-1 11z" fill="#cfc9e6"/>',
+    cloud: '<path d="M14 36h20a8 8 0 0 0 0-16 10 10 0 0 0-19 3.5A6.3 6.3 0 0 0 14 36z" fill="#cfc9e6"/>',
+    fog: '<g stroke="#cfc9e6" stroke-width="3" stroke-linecap="round"><path d="M10 18h28M6 25h32M12 32h26"/></g>',
+    rain: '<path d="M14 30h20a7 7 0 0 0 0-14 9 9 0 0 0-17 3 5.5 5.5 0 0 0-3 11z" fill="#cfc9e6"/><g stroke="#7fb4ff" stroke-width="2.5" stroke-linecap="round"><path d="M17 35l-2 5M25 35l-2 5M33 35l-2 5"/></g>',
+    snow: '<path d="M14 30h20a7 7 0 0 0 0-14 9 9 0 0 0-17 3 5.5 5.5 0 0 0-3 11z" fill="#cfc9e6"/><g fill="#ffffff"><circle cx="17" cy="38" r="2"/><circle cx="25" cy="40" r="2"/><circle cx="33" cy="38" r="2"/></g>',
+    storm: '<path d="M14 28h20a7 7 0 0 0 0-14 9 9 0 0 0-17 3 5.5 5.5 0 0 0-3 11z" fill="#8f89a8"/><path d="M25 29l-5 8h5l-3 7 8-10h-5l3-5z" fill="#f5b301"/>',
+  };
+  function showWx(temp, feels, wind, code, live) {
+    const [desc, icon] = WX[code] || ["Weather", "cloud"];
+    $("wxIcon").innerHTML = ICONS[icon];
+    $("wxTemp").textContent = Math.round(temp) + "°";
+    $("wxDesc").textContent = desc;
+    $("wxSub").textContent = `Feels ${Math.round(feels)}° · Wind ${Math.round(wind)} km/h`;
+    $("wxTag").hidden = live;
+    $("wxNote").textContent = live
+      ? "Updated " + new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })
+      : "Sample weather. Live weather appears once GPS is on.";
+  }
+  showWx(29, 31, 9, 1, false);
+
+  async function maybeWeather() {
+    if (!s.coords || Date.now() - s.wxFetchedAt < 15 * 60 * 1000) return;
+    s.wxFetchedAt = Date.now();
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${s.coords.lat.toFixed(3)}&longitude=${s.coords.lon.toFixed(3)}` +
+      `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto`;
+    try {
+      const r = await fetch(u);
+      if (!r.ok) throw new Error(r.status);
+      const j = await r.json();
+      const c = j.current;
+      showWx(c.temperature_2m, c.apparent_temperature, c.wind_speed_10m, c.weather_code, true);
+    } catch {
+      $("wxNote").textContent = "Couldn't reach the weather service. Trying again in 15 minutes.";
+    }
+  }
+
+  // ---------- Battery (where the browser shares it) ----------
+  if (navigator.getBattery) {
+    navigator.getBattery().then((b) => {
+      const show = () => {
+        $("batteryChip").hidden = false;
+        $("batteryText").textContent = `Battery ${Math.round(b.level * 100)}%${b.charging ? " · charging" : ""}`;
+      };
+      show(); b.addEventListener("levelchange", show); b.addEventListener("chargingchange", show);
+    }).catch(() => {});
+  }
+
+  // ---------- Keep the screen on, full screen ----------
+  let wakeLock = null;
+  async function keepAwake() {
+    try { if (navigator.wakeLock && !wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); } } catch {}
+  }
+  document.addEventListener("click", keepAwake, { once: true });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") keepAwake(); });
+  keepAwake();
+
+  $("fullBtn").addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {}
+  });
+
+  // ---------- Animation loop (also drives the demo) ----------
+  let lastFrame = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.25, (now - lastFrame) / 1000);
+    lastFrame = now;
+    if (!s.live) {
+      // Gentle city-drive pattern so the preview looks alive. Clearly tagged DEMO on screen.
+      const t = now / 1000;
+      s.target = Math.max(0, 46 + 22 * Math.sin(t / 5.5) + 8 * Math.sin(t / 1.7));
+      s.heading = (s.heading + dt * 6) % 360;
+      s.demoTrip.dist += (s.shown / 3600) * dt;
+      s.demoTrip.moving += dt;
+      s.demoTrip.max = Math.max(s.demoTrip.max, s.shown);
+      if (Math.floor(now / 1000) !== Math.floor((now - dt * 1000) / 1000)) { renderTrip(); renderHeading(); }
+    }
+    s.shown += (s.target - s.shown) * (reduceMotion ? 1 : Math.min(1, dt * 4));
+    renderSpeed();
+    drawDial();
+    requestAnimationFrame(frame);
+  }
+  renderTrip(); renderHeading();
+  requestAnimationFrame(frame);
+  window.addEventListener("resize", drawDial);
+})();
+</script>
+
+</body>
+</html>

@@ -269,6 +269,9 @@ button, input, select { font: inherit; color: inherit; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
   font-weight: 600; font-size: 13px;
 }
+button.app-link { border: 0; background: transparent; cursor: pointer; font: inherit; color: var(--fg); }
+.app-link .cnt { font-size: 11px; font-weight: 500; color: var(--muted); line-height: 1; }
+.app-link .cnt:empty { display: none; }
 .app-link:hover, .app-link:focus-visible { background: var(--panel-2); }
 .app-link svg { width: 26px; height: 26px; stroke: var(--a2-soft); fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -494,6 +497,24 @@ button, input, select { font: inherit; color: inherit; }
   </section>
 
   <nav class="dock" aria-label="Apps">
+    <button class="app-link" type="button" data-app="favourites" hidden>
+      <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Favourites<span class="cnt" id="cFav"></span>
+    </button>
+    <button class="app-link" type="button" data-app="live" hidden>
+      <svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8 3l4 4 4-4"/><path d="M10.5 10.5 14.5 13l-4 2.5z"/></svg>Live TV<span class="cnt" id="cLive"></span>
+    </button>
+    <button class="app-link" type="button" id="dockRadio">
+      <svg viewBox="0 0 24 24"><rect x="3" y="9" width="18" height="11" rx="1"/><path d="M6 9 17 4"/><circle cx="8.5" cy="14.5" r="2.5"/><path d="M14 13h4M14 16h4"/></svg>Radio
+    </button>
+    <button class="app-link" type="button" data-app="movies" hidden>
+      <svg viewBox="0 0 24 24"><path d="M4 10h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 10 3.3 6.2 19 3.5l.7 3.8z"/><path d="M10.5 12.5 14.5 15l-4 2.5z"/></svg>Movies<span class="cnt" id="cMov"></span>
+    </button>
+    <button class="app-link" type="button" data-app="series" hidden>
+      <svg viewBox="0 0 24 24"><path d="M7 4h13v10"/><path d="M4 7h13v13H4z"/><path d="M8.5 10.5l4 3-4 3z"/></svg>Series<span class="cnt" id="cSer"></span>
+    </button>
+    <button class="app-link" type="button" data-app="browser" hidden>
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17M12 3c2.8 2.6 2.8 15.4 0 18M12 3c-2.8 2.6-2.8 15.4 0 18"/></svg>Browser
+    </button>
     <a class="app-link" href="https://m.youtube.com" target="_blank" rel="noopener">
       <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M10.5 9.5 15 12l-4.5 2.5z"/></svg>YouTube
     </a>
@@ -1296,6 +1317,38 @@ button, input, select { font: inherit; color: inherit; }
   renderTrip(); renderHeading(); renderShuffle();
   renderRadio(); renderNow();
   loadSongs();
+
+  // Radio button: opens the music library on the Radio tab
+  $("dockRadio").addEventListener("click", () => { setTab("radio"); openSheet("libSheet"); });
+
+  // Back button inside the app: close an open panel first
+  window.auraBack = () => {
+    if (!$("libSheet").hidden || !$("settingsSheet").hidden) { closeSheet("libSheet"); closeSheet("settingsSheet"); return true; }
+    return false;
+  };
+
+  // Inside the AuraDrive Android app, the app adds a "AuraDriveApp" bridge that opens its own screens.
+  const nativeApp = window.AuraDriveApp || null;
+  if (nativeApp) {
+    root.classList.add("in-app");
+    $("fullBtn").hidden = true;
+    document.querySelectorAll("[data-app]").forEach((b) => {
+      b.hidden = false;
+      b.addEventListener("click", () => { try { nativeApp.open(b.dataset.app); } catch {} });
+    });
+    const label = (n, word) => (n > 0 ? `${Number(n).toLocaleString("en-IN")} ${word}` : "");
+    const showCounts = () => {
+      try {
+        const c = JSON.parse(nativeApp.counts() || "{}");
+        $("cFav").textContent = label(c.favourites, "saved");
+        $("cLive").textContent = c.loading && !c.live ? "Loading…" : label(c.live, "channels");
+        $("cMov").textContent = label(c.movies, "movies");
+        $("cSer").textContent = label(c.series, "shows");
+      } catch {}
+    };
+    showCounts();
+    setInterval(showCounts, 4000);
+  }
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { readColors(); drawDial(); });
   requestAnimationFrame(frame);
   window.addEventListener("resize", drawDial);
